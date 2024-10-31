@@ -1,3 +1,5 @@
+use std::env;
+
 use log::{error, info, warn, LevelFilter};
 use speedtest_rs::{error::SpeedTestError, speedtest};
 use thiserror::Error;
@@ -50,6 +52,11 @@ enum TestResult {
 async fn main() -> Result<(), ServiceError> {
     env_logger::builder().filter_level(LevelFilter::Info).init();
 
+    let check_interval = env::var("CHECK_INTERVAL")
+        .ok()
+        .and_then(|val| val.parse::<u64>().ok())
+        .unwrap_or(60);
+
     // Channel for reporting test results
     let (tx, mut rx) = mpsc::channel(32);
 
@@ -66,7 +73,7 @@ async fn main() -> Result<(), ServiceError> {
                 }
                 Err(err) => error!("Download test failed: {:?}", err),
             }
-            sleep(Duration::from_secs(60)).await;
+            sleep(Duration::from_secs(check_interval)).await;
         }
     });
 
@@ -83,7 +90,7 @@ async fn main() -> Result<(), ServiceError> {
                 }
                 Err(err) => warn!("Upload test failed: {:?}", err),
             }
-            sleep(Duration::from_secs(60)).await;
+            sleep(Duration::from_secs(check_interval)).await;
         }
     });
 
@@ -100,7 +107,7 @@ async fn main() -> Result<(), ServiceError> {
                 }
                 Err(err) => warn!("Ping test failed: {:?}", err),
             }
-            sleep(Duration::from_secs(60)).await;
+            sleep(Duration::from_secs(check_interval)).await;
         }
     });
 
