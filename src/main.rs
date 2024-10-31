@@ -12,7 +12,7 @@ use tokio::{
 enum TestResult {
     Download(f64), // Download speed in Mbps
     Upload(f64),   // Upload speed in Mbps
-    Ping(u32),     // Ping in ms
+    Ping(f64),     // Ping in ms
     Jitter(f64),   // Jitter in ms
 }
 
@@ -42,16 +42,51 @@ async fn main() -> Result<(), Error> {
     });
 
     // Spawn task to repeatedly perform upload tests
+    let upload_tx = tx.clone();
     let upload_task = task::spawn(async move {
         loop {
             match perform_upload_test().await {
                 Ok(speed) => {
-                    if let Err(err) = tx.send(TestResult::Upload(speed)).await {
+                    if let Err(err) = upload_tx.send(TestResult::Upload(speed)).await {
                         warn!("Failed to send upload result: {:?}", err);
                         break;
                     }
                 }
                 Err(err) => warn!("Upload test failed: {:?}", err),
+            }
+            sleep(Duration::from_secs(60)).await;
+        }
+    });
+
+    // Spawn task to repeatedly perform ping tests
+    let ping_tx = tx.clone();
+    let ping_task = task::spawn(async move {
+        loop {
+            match perform_ping_test().await {
+                Ok(ping) => {
+                    if let Err(err) = ping_tx.send(TestResult::Ping(ping)).await {
+                        warn!("Failed to send ping result: {:?}", err);
+                        break;
+                    }
+                }
+                Err(err) => warn!("Ping test failed: {:?}", err),
+            }
+            sleep(Duration::from_secs(60)).await;
+        }
+    });
+
+    // Spawn task to repeatedly perform jitter tests
+    let jitter_tx = tx.clone();
+    let jitter_task = task::spawn(async move {
+        loop {
+            match perform_jitter_calculation(10).await {
+                Ok(jitter) => {
+                    if let Err(err) = jitter_tx.send(TestResult::Jitter(jitter)).await {
+                        warn!("Failed to send jitter result: {:?}", err);
+                        break;
+                    }
+                }
+                Err(err) => warn!("Jitter test failed: {:?}", err),
             }
             sleep(Duration::from_secs(60)).await;
         }
@@ -66,12 +101,17 @@ async fn main() -> Result<(), Error> {
             TestResult::Upload(speed) => {
                 info!("Upload speed: {:.2} Mbps", speed);
             }
-            _ => continue,
+            TestResult::Ping(ping) => {
+                info!("Ping: {:.2} ms", ping);
+            }
+            TestResult::Jitter(jitter) => {
+                info!("Jitter: {:.2} ms", jitter);
+            }
         }
     }
 
     // Await task completion (optional, for cleanup)
-    let _ = tokio::join!(download_task, upload_task);
+    let _ = tokio::join!(download_task, upload_task, ping_task, jitter_task);
 
     Ok(())
 }
@@ -107,18 +147,32 @@ async fn perform_upload_test() -> Result<f64, Error> {
     Ok(result)
 }
 
-// // Placeholder function for ping test
-// async fn perform_ping_test() -> Result<u32, Error> {
-//     let options = SpeedTestOptions::default();
-//     let speed_test = SpeedTest::new(options);
-//     let latency = speed_test.perform_ping()?;
-//     Ok(latency)
-// }
+async fn perform_ping_test() -> Result<f64, Error> {
+    let result = task::spawn_blocking(|| {
+        let config = speedtest::get_configuration().unwrap();
+        let servers = speedtest::get_server_list_with_config(&config).unwrap();
+        let best_server = speedtest::get_best_server_based_on_latency(&servers.servers).unwrap();
 
-// // Calculate jitter as the mean absolute deviation from the mean ping time
-// fn calculate_jitter(pings: &[u32]) -> f64 {
-//     let mean_ping = pings.iter().sum::<u32>() as f64 / pings.len() as f64;
-//     pings.iter()
-//         .map(|&ping| (ping as f64 - mean_ping).abs())
-//         .sum::<f64>() / pings.len() as f64
-// }
+        Ok::<_, Error>(best_server.latency)
+    })
+    .await??;
+    Ok(result.as_secs_f64() * 1000.0)
+}
+
+async fn perform_jitter_calculation(num_samples: usize) -> Result<f64, Error> {
+    let mut pings = Vec::with_capacity(num_samples);
+    for _ in 0..num_samples {
+        let ping = perform_ping_test().await?;
+        pings.push(ping);
+        sleep(Duration::from_millis(100)).await;
+    }
+
+    let mean_ping = pings.iter().sum::<f64>() / pings.len() as f64;
+    let jitter = pings
+        .iter()
+        .map(|&ping| (ping as f64 - mean_ping).abs())
+        .sum::<f64>()
+        / num_samples as f64;
+
+    Ok(jitter)
+}
