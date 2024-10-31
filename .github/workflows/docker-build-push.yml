@@ -28,4 +28,4 @@ jobs:
           context: .
           file: Dockerfile
           push: true
-          tags: speedtest_mqtt/speedtest_mqtt:latest
+          tags: jocas/speedtest-mqtt:latest

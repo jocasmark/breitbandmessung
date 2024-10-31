@@ -1,0 +1,10 @@
+# Ignore target directory
+target/
+
+# Ignore typical VCS files
+.git/
+.gitignore
+
+# Ignore build and temp files
+Dockerfile
+docker-compose.yml

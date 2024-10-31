@@ -1,20 +1,24 @@
-FROM rust:1.82 AS builder
+FROM rust:alpine AS builder
+
+# Install dependencies for OpenSSL vendored build
+RUN apk add --no-cache perl make pkgconf openssl-dev musl-dev
 
 WORKDIR /usr/src/app
 
 COPY Cargo.toml Cargo.lock ./
 RUN cargo fetch
 
-COPY . .
-RUN cargo build --release
+# Copy source code and build with OpenSSL vendoring enabled
+COPY src ./src
+RUN cargo build --release --target x86_64-unknown-linux-musl
 
-FROM debian:buster-slim
+# Final stage with minimal runtime using scratch
+FROM scratch
 
-RUN apt-get update && apt-get install -y \
-    libssl1.1 \
- && rm -rf /var/lib/apt/lists/*
+# Copy CA certificates for SSL verification
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
-COPY --from=builder /usr/src/app/target/release/speedtest_mqtt /usr/local/bin/speedtest_mqtt
+# Copy the compiled binary
+COPY --from=builder /usr/src/app/target/x86_64-unknown-linux-musl/release/speedtest_mqtt /usr/local/bin/speedtest_mqtt
 
-# Set the default command to run your application
 CMD ["speedtest_mqtt"]

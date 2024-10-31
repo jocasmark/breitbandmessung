@@ -4,6 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = "1.0.91"
 env_logger = "0.11.5"
 log = "0.4.22"
+openssl = { version = "0.10", features = ["vendored"] }
+speedtest-rs = "0.2.0"
+thiserror = "1.0.65"
 tokio = { version = "1.41.0", features = ["full"] }
+
+[[bin]]
+name = "speedtest_mqtt"
+path = "src/main.rs" 
