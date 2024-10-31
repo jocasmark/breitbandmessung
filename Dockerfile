@@ -9,7 +9,7 @@ COPY Cargo.toml Cargo.lock ./
 RUN cargo fetch
 
 # Copy source code and build with OpenSSL vendoring enabled
-COPY . .
+COPY src ./src
 RUN cargo build --release --target x86_64-unknown-linux-musl
 
 # Final stage with minimal runtime using scratch

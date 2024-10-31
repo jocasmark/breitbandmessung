@@ -1,24 +1,6 @@
 version: '3.8'
 services:
   speed_test:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    depends_on:
-      - mqtt_broker
+    image: jocas/speedtest-mqtt:latest
     environment:
-      - MQTT_HOST=mqtt_broker
-      - MQTT_PORT=1883
-    networks:
-      - test_net
-
-  mqtt_broker:
-    image: eclipse-mosquitto
-    ports:
-      - "1883:1883"
-    networks:
-      - test_net
-
-networks:
-  test_net:
-    driver: bridge
+      - CHECK_INTERVAL=60
