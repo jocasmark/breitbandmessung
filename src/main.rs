@@ -1,12 +1,43 @@
-use anyhow::Error;
-use env_logger;
 use log::{error, info, warn, LevelFilter};
-use speedtest_rs::speedtest::{self, SpeedTestResult};
+use speedtest_rs::{error::SpeedTestError, speedtest};
+use thiserror::Error;
 use tokio::{
     sync::mpsc,
-    task,
+    task::{self, JoinError},
     time::{sleep, Duration},
 };
+
+#[derive(Debug, Error)]
+pub enum ServiceError {
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
+    #[error("Server list error: {0}")]
+    ServerListError(String),
+    #[error("Latency error: {0}")]
+    LatencyError(String),
+    #[error("Download test error: {0}")]
+    DownloadTestError(String),
+    #[error("Upload test error: {0}")]
+    UploadTestError(String),
+    #[error("Task join error")]
+    TaskJoinError,
+    #[error("SpeedTest error: {0:?}")]
+    SpeedTest(SpeedTestError),
+}
+
+// Implement conversion from `JoinError` to `ServiceError`
+impl From<JoinError> for ServiceError {
+    fn from(_: JoinError) -> Self {
+        ServiceError::TaskJoinError
+    }
+}
+
+// Implement conversion from `SpeedTestError` to `ServiceError`
+impl From<SpeedTestError> for ServiceError {
+    fn from(error: SpeedTestError) -> Self {
+        ServiceError::SpeedTest(error)
+    }
+}
 
 #[derive(Debug)]
 enum TestResult {
@@ -16,8 +47,7 @@ enum TestResult {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
-    // Initialize the logger
+async fn main() -> Result<(), ServiceError> {
     env_logger::builder().filter_level(LevelFilter::Info).init();
 
     // Channel for reporting test results
@@ -95,45 +125,49 @@ async fn main() -> Result<(), Error> {
     Ok(())
 }
 
-async fn perform_download_test() -> Result<f64, Error> {
+async fn perform_download_test() -> Result<f64, ServiceError> {
     let result = task::spawn_blocking(|| {
-        let mut config = speedtest::get_configuration().unwrap();
-        let servers = speedtest::get_server_list_with_config(&config).unwrap();
-        let best_server = speedtest::get_best_server_based_on_latency(&servers.servers).unwrap();
+        let mut config = speedtest::get_configuration()?;
+        let servers = speedtest::get_server_list_with_config(&config)?;
+        let best_server = speedtest::get_best_server_based_on_latency(&servers.servers)?;
         let download_measurement = speedtest::test_download_with_progress_and_config(
             best_server.server,
             || {},
             &mut config,
-        )
-        .unwrap();
-        Ok::<_, Error>(download_measurement.bps_f64() / 1_000_000.0) // Convert to Mbps
+        )?;
+        Ok::<f64, ServiceError>(download_measurement.bps_f64() / 1_000_000.0) // Convert to Mbps
     })
     .await??;
     Ok(result)
 }
 
-async fn perform_upload_test() -> Result<f64, Error> {
+async fn perform_upload_test() -> Result<f64, ServiceError> {
     let result = task::spawn_blocking(|| {
-        let mut config = speedtest::get_configuration().unwrap();
-        let servers = speedtest::get_server_list_with_config(&config).unwrap();
-        let best_server = speedtest::get_best_server_based_on_latency(&servers.servers).unwrap();
-        let upload_measurement =
-            speedtest::test_upload_with_progress_and_config(best_server.server, || {}, &mut config)
-                .unwrap();
-        Ok::<_, Error>(upload_measurement.bps_f64() / 1_000_000.0) // Convert to Mbps
+        let mut config = speedtest::get_configuration()?;
+        let servers = speedtest::get_server_list_with_config(&config)?;
+        let best_server = speedtest::get_best_server_based_on_latency(&servers.servers)?;
+        let upload_measurement = speedtest::test_upload_with_progress_and_config(
+            best_server.server,
+            || {},
+            &mut config,
+        )?;
+        Ok::<f64, ServiceError>(upload_measurement.bps_f64() / 1_000_000.0) // Convert to Mbps
     })
     .await??;
     Ok(result)
 }
 
-async fn perform_ping_test() -> Result<f64, Error> {
+async fn perform_ping_test() -> Result<f64, ServiceError> {
     let result = task::spawn_blocking(|| {
-        let config = speedtest::get_configuration().unwrap();
-        let servers = speedtest::get_server_list_with_config(&config).unwrap();
-        let best_server = speedtest::get_best_server_based_on_latency(&servers.servers).unwrap();
+        let config = speedtest::get_configuration().map_err(ServiceError::from)?;
+        let servers =
+            speedtest::get_server_list_with_config(&config).map_err(ServiceError::from)?;
+        let best_server = speedtest::get_best_server_based_on_latency(&servers.servers)
+            .map_err(ServiceError::from)?;
 
-        Ok::<_, Error>(best_server.latency)
+        Ok::<f64, ServiceError>(best_server.latency.as_secs_f64())
     })
     .await??;
-    Ok(result.as_secs_f64() * 1000.0)
+
+    Ok(result * 1000.0) // Convert to milliseconds
 }
