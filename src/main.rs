@@ -1,15 +1,19 @@
 use config::Config;
 use errors::ServiceError;
+use lazy_static::lazy_static;
 use log::{debug, error, info, warn};
+use models::SpeedTestResult;
 use rumqttc::{Client, MqttOptions};
 use speedtest_rs::speedtest;
 use tokio::{
-    sync::mpsc, task, time::{sleep, Duration}
+    sync::mpsc,
+    task,
+    time::{sleep, Duration},
 };
-use lazy_static::lazy_static;
 
 mod config;
 mod errors;
+mod models;
 
 lazy_static! {
     static ref CONFIG: Config = Config::from_env();
@@ -52,13 +56,19 @@ async fn main() -> Result<(), ServiceError> {
     // Task to manage MQTT publishing and connection
     let mqtt_publish_task = tokio::spawn(async move {
         while let Some(results) = result_rx.recv().await {
-            let payload = format!(
-                "Download: {:.2} Mbps, Upload: {:.2} Mbps, Ping: {:.2} ms",
-                results.download, results.upload, results.ping
-            );
+            let speed_test_result =
+                SpeedTestResult::new(results.download, results.upload, results.ping);
+
+            let payload = match serde_json::to_string(&speed_test_result) {
+                Ok(string) => string,
+                Err(err) => {
+                    warn!("Failed to serialize SpeedTest result to JSON: {:?}", err);
+                    continue;
+                }
+            };
 
             match mqtt_client.publish(
-                "speedtest/results",
+                &CONFIG.mqtt_topic,
                 rumqttc::QoS::AtLeastOnce,
                 false,
                 payload.clone(),
@@ -78,14 +88,14 @@ async fn main() -> Result<(), ServiceError> {
                 }
                 Err(err) => {
                     error!("MQTT connection error: {:?}", err);
-                    std::process::exit(1); 
+                    std::process::exit(1);
                 }
             }
         }
     });
 
     let _ = tokio::join!(speed_test_task, mqtt_publish_task, mqtt_eventloop_task);
-    Ok(())
+    Ok::<(), ServiceError>(())
 }
 
 async fn perform_all_tests() -> Result<TestResults, ServiceError> {

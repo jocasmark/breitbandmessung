@@ -188,6 +188,7 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
+ "serde",
  "wasm-bindgen",
  "windows-targets 0.52.6",
 ]
@@ -1397,11 +1398,14 @@ name = "speedtest_mqtt"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "env_logger",
  "lazy_static",
  "log",
  "openssl",
  "rumqttc",
+ "serde",
+ "serde_json",
  "speedtest-rs",
  "thiserror",
  "tokio",

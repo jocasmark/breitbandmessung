@@ -82,13 +82,14 @@ The application can be configured through the following environment variables:
 
 ### Environment Variables
 
-| Variable         | Default     | Description                                                                |
-|------------------|-------------|----------------------------------------------------------------------------|
-| `CHECK_INTERVAL` | `60`        | Interval (in seconds) between each speed test (download, upload, ping).    |
-| `MQTT_ID`        | `speedtest` | The unique identifier for the MQTT client.                                |
-| `MQTT_HOST`      | `localhost` | The hostname or IP address of the MQTT broker.                            |
-| `MQTT_PORT`      | `1883`      | The port on which the MQTT broker is running.                             |
-| `LOG_LEVEL`      | `info`      | The log level for the application (`trace`, `debug`, `info`, `warn`, `error`). Adjusts the verbosity of log output for monitoring or debugging purposes. |
+| Variable         | Default             | Description                                                                |
+|------------------|---------------------|----------------------------------------------------------------------------|
+| `CHECK_INTERVAL` | `60`                | Interval (in seconds) between each speed test (download, upload, ping).    |
+| `MQTT_ID`        | `speedtest`         | The unique identifier for the MQTT client.                                |
+| `MQTT_TOPIC`     | `speedtest/results` | The topic to publish to MQTT.                                             |
+| `MQTT_HOST`      | `localhost`         | The hostname or IP address of the MQTT broker.                            |
+| `MQTT_PORT`      | `1883`              | The port on which the MQTT broker is running.                             |
+| `LOG_LEVEL`      | `info`              | The log level for the application (`trace`, `debug`, `info`, `warn`, `error`). Adjusts the verbosity of log output for monitoring or debugging purposes. |
 
 ### Example Configuration
 
@@ -99,12 +100,13 @@ To set environment variables, you can use a `.env` file or set them directly in 
 ```plaintext
 CHECK_INTERVAL=120
 MQTT_ID=speedtest
+MQTT_TOPIC=speedtest/results
 MQTT_HOST=broker.example.com
 MQTT_PORT=1883
 LOG_LEVEL=info
 ```
 
-This setup will run speed tests every 120 seconds, connect to an MQTT broker at `broker.example.com` on port `1883`, and produce log output at the `info` level.
+This setup will run speed tests every 120 seconds, connect to an MQTT broker at `broker.example.com` on port `1883`, publish to topic `speedtest/results`, and produce log output at the `info` level.
 
 ### Example Configuration in `docker-compose.yml`
 
@@ -118,6 +120,7 @@ services:
     environment:
       - CHECK_INTERVAL=120             # Runs the speed test every 120 seconds
       - MQTT_ID=speedtest              # Sets the MQTT client ID
+      - MQTT_TOPIC=speedtest/resulst   # Sets the MQTT topic to be published to
       - MQTT_HOST=broker.example.com   # The MQTT broker's hostname or IP address
       - MQTT_PORT=1883                 # The MQTT broker's port
       - LOG_LEVEL=info                 # Sets the logging level (e.g., info, debug, warn)
