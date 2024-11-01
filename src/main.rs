@@ -1,45 +1,18 @@
-use std::env;
-
-use log::{debug, error, info, warn, LevelFilter};
+use config::Config;
+use errors::ServiceError;
+use log::{debug, error, info, warn};
 use rumqttc::{Client, MqttOptions};
-use speedtest_rs::{error::SpeedTestError, speedtest};
-use thiserror::Error;
+use speedtest_rs::speedtest;
 use tokio::{
-    sync::mpsc,
-    task::{self, JoinError},
-    time::{sleep, Duration},
+    sync::mpsc, task, time::{sleep, Duration}
 };
+use lazy_static::lazy_static;
 
-#[derive(Debug, Error)]
-pub enum ServiceError {
-    #[error("Configuration error: {0}")]
-    ConfigError(String),
-    #[error("Server list error: {0}")]
-    ServerListError(String),
-    #[error("Latency error: {0}")]
-    LatencyError(String),
-    #[error("Download test error: {0}")]
-    DownloadTestError(String),
-    #[error("Upload test error: {0}")]
-    UploadTestError(String),
-    #[error("Task join error")]
-    TaskJoinError,
-    #[error("SpeedTest error: {0:?}")]
-    SpeedTest(SpeedTestError),
-}
+mod config;
+mod errors;
 
-// Implement conversion from `JoinError` to `ServiceError`
-impl From<JoinError> for ServiceError {
-    fn from(_: JoinError) -> Self {
-        ServiceError::TaskJoinError
-    }
-}
-
-// Implement conversion from `SpeedTestError` to `ServiceError`
-impl From<SpeedTestError> for ServiceError {
-    fn from(error: SpeedTestError) -> Self {
-        ServiceError::SpeedTest(error)
-    }
+lazy_static! {
+    static ref CONFIG: Config = Config::from_env();
 }
 
 #[derive(Debug)]
@@ -51,24 +24,12 @@ struct TestResults {
 
 #[tokio::main]
 async fn main() -> Result<(), ServiceError> {
-    env_logger::builder().filter_level(LevelFilter::Info).init();
-
-    let check_interval = env::var("CHECK_INTERVAL")
-        .ok()
-        .and_then(|val| val.parse::<u64>().ok())
-        .unwrap_or(60);
-
-    let mqtt_id = env::var("MQTT_ID").unwrap_or("speedtest".to_string());
-    let mqtt_host = env::var("MQTT_HOST").unwrap_or("localhost".to_string());
-    let mqtt_port = env::var("MQTT_PORT")
-        .ok()
-        .and_then(|val| val.parse::<u16>().ok())
-        .unwrap_or(1883);
+    env_logger::builder().filter_level(CONFIG.log_level).init();
 
     // Channel for sending test results to the MQTT publishing task
     let (result_tx, mut result_rx) = mpsc::channel(1);
 
-    let mut mqttoptions = MqttOptions::new(mqtt_id, mqtt_host, mqtt_port);
+    let mut mqttoptions = MqttOptions::new(&CONFIG.mqtt_id, &CONFIG.mqtt_host, CONFIG.mqtt_port);
     mqttoptions.set_keep_alive(Duration::from_secs(5));
     mqttoptions.set_clean_session(true);
     let (mqtt_client, mut mqtt_connection) = Client::new(mqttoptions, 10);
@@ -84,7 +45,7 @@ async fn main() -> Result<(), ServiceError> {
                 Err(err) => error!("Speedtest failed: {:?}", err),
             }
 
-            sleep(Duration::from_secs(check_interval)).await;
+            sleep(Duration::from_secs(CONFIG.check_interval)).await;
         }
     });
 
@@ -117,7 +78,7 @@ async fn main() -> Result<(), ServiceError> {
                 }
                 Err(err) => {
                     error!("MQTT connection error: {:?}", err);
-                    break;
+                    std::process::exit(1); 
                 }
             }
         }

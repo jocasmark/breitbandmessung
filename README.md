@@ -1,5 +1,5 @@
 
-# Speedtest-MQTT
+# SpeedTest-MQTT
 
 This application measures internet speed (download, upload, and ping) and logs the results periodically. 
 It uses the `speedtest-rs` library for conducting the speed tests and sends the results over MQTT.
@@ -68,11 +68,43 @@ Example log output:
 
 The `speedtest-mqtt` service can be configured using environment variables. Below are the available configuration options:
 
+## Configuration
+
+The application can be configured through the following environment variables:
+
+# SpeedTest MQTT
+
+A Rust-based service that periodically performs internet speed tests and publishes the results (download, upload, and ping) to an MQTT broker. This service is useful for monitoring internet connection speeds and latency over time and can be integrated into other IoT or data monitoring systems via MQTT.
+
+## Configuration
+
+The application can be configured through the following environment variables:
+
 ### Environment Variables
 
-| Variable           | Default | Description                                                                 |
-|--------------------|---------|-----------------------------------------------------------------------------|
-| `CHECK_INTERVAL`   | `60`    | Interval (in seconds) between each speed test (download, upload, ping, etc).|
+| Variable         | Default     | Description                                                                |
+|------------------|-------------|----------------------------------------------------------------------------|
+| `CHECK_INTERVAL` | `60`        | Interval (in seconds) between each speed test (download, upload, ping).    |
+| `MQTT_ID`        | `speedtest` | The unique identifier for the MQTT client.                                |
+| `MQTT_HOST`      | `localhost` | The hostname or IP address of the MQTT broker.                            |
+| `MQTT_PORT`      | `1883`      | The port on which the MQTT broker is running.                             |
+| `LOG_LEVEL`      | `info`      | The log level for the application (`trace`, `debug`, `info`, `warn`, `error`). Adjusts the verbosity of log output for monitoring or debugging purposes. |
+
+### Example Configuration
+
+To set environment variables, you can use a `.env` file or set them directly in your deployment or Docker Compose configuration.
+
+#### Example .env file
+
+```plaintext
+CHECK_INTERVAL=120
+MQTT_ID=speedtest
+MQTT_HOST=broker.example.com
+MQTT_PORT=1883
+LOG_LEVEL=info
+```
+
+This setup will run speed tests every 120 seconds, connect to an MQTT broker at `broker.example.com` on port `1883`, and produce log output at the `info` level.
 
 ### Example Configuration in `docker-compose.yml`
 
@@ -84,7 +116,11 @@ services:
   speed_test:
     image: jocas/speedtest-mqtt
     environment:
-      - CHECK_INTERVAL=120  # Runs the speed test every 120 seconds
+      - CHECK_INTERVAL=120             # Runs the speed test every 120 seconds
+      - MQTT_ID=speedtest              # Sets the MQTT client ID
+      - MQTT_HOST=broker.example.com   # The MQTT broker's hostname or IP address
+      - MQTT_PORT=1883                 # The MQTT broker's port
+      - LOG_LEVEL=info                 # Sets the logging level (e.g., info, debug, warn)
 ```
 
 ## License
