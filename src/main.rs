@@ -135,14 +135,11 @@ async fn perform_download_test() -> Result<f64, ServiceError> {
 
 async fn perform_upload_test() -> Result<f64, ServiceError> {
     let result = task::spawn_blocking(|| {
-        let mut config = speedtest::get_configuration()?;
+        let config = speedtest::get_configuration()?;
         let servers = speedtest::get_server_list_with_config(&config)?;
         let best_server = speedtest::get_best_server_based_on_latency(&servers.servers)?;
-        let upload_measurement = speedtest::test_upload_with_progress_and_config(
-            best_server.server,
-            || {},
-            &mut config,
-        )?;
+        let upload_measurement =
+            speedtest::test_upload_with_progress_and_config(best_server.server, || {}, &config)?;
         Ok::<f64, ServiceError>(upload_measurement.bps_f64() / 1_000_000.0) // Convert to Mbps
     })
     .await??;
