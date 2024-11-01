@@ -1,6 +1,33 @@
 version: '3.8'
 services:
-  speed_test:
+  speedtest:
     image: jocas/speedtest-mqtt:latest
+    container_name: speedtest
     environment:
       - CHECK_INTERVAL=60
+      - MQTT_ID=speedtest
+      - MQTT_HOST=emqx
+      - MQTT_PORT=1883
+    depends_on:
+      - emqx
+    networks:
+      - mqtt-net
+
+  emqx:
+    image: emqx:latest
+    container_name: emqx
+    environment:
+      - EMQX_NAME=emqx
+      - EMQX_DASHBOARD__DEFAULT_USERNAME=admin
+      - EMQX_DASHBOARD__DEFAULT_PASSWORD=admin
+      - EMQX_CLUSTER__DISCOVERY_STRATEGY=static
+    networks:
+      - mqtt-net
+    ports:
+      - "1884:1883"
+      - "8084:8083"
+      - "18083:18083"
+
+networks:
+  mqtt-net:
+    driver: bridge

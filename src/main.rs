@@ -1,135 +1,120 @@
-use std::env;
-
-use log::{error, info, warn, LevelFilter};
-use speedtest_rs::{error::SpeedTestError, speedtest};
-use thiserror::Error;
+use config::Config;
+use errors::ServiceError;
+use lazy_static::lazy_static;
+use log::{debug, error, info, warn};
+use models::SpeedTestResult;
+use rumqttc::{Client, MqttOptions};
+use speedtest_rs::speedtest;
 use tokio::{
     sync::mpsc,
-    task::{self, JoinError},
+    task,
     time::{sleep, Duration},
 };
 
-#[derive(Debug, Error)]
-pub enum ServiceError {
-    #[error("Configuration error: {0}")]
-    ConfigError(String),
-    #[error("Server list error: {0}")]
-    ServerListError(String),
-    #[error("Latency error: {0}")]
-    LatencyError(String),
-    #[error("Download test error: {0}")]
-    DownloadTestError(String),
-    #[error("Upload test error: {0}")]
-    UploadTestError(String),
-    #[error("Task join error")]
-    TaskJoinError,
-    #[error("SpeedTest error: {0:?}")]
-    SpeedTest(SpeedTestError),
-}
+mod config;
+mod errors;
+mod models;
 
-// Implement conversion from `JoinError` to `ServiceError`
-impl From<JoinError> for ServiceError {
-    fn from(_: JoinError) -> Self {
-        ServiceError::TaskJoinError
-    }
-}
-
-// Implement conversion from `SpeedTestError` to `ServiceError`
-impl From<SpeedTestError> for ServiceError {
-    fn from(error: SpeedTestError) -> Self {
-        ServiceError::SpeedTest(error)
-    }
+lazy_static! {
+    static ref CONFIG: Config = Config::from_env();
 }
 
 #[derive(Debug)]
-enum TestResult {
-    Download(f64), // Download speed in Mbps
-    Upload(f64),   // Upload speed in Mbps
-    Ping(f64),     // Ping in ms
+struct TestResults {
+    download: f64,
+    upload: f64,
+    ping: f64,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), ServiceError> {
-    env_logger::builder().filter_level(LevelFilter::Info).init();
+    env_logger::builder().filter_level(CONFIG.log_level).init();
 
-    let check_interval = env::var("CHECK_INTERVAL")
-        .ok()
-        .and_then(|val| val.parse::<u64>().ok())
-        .unwrap_or(60);
+    // Channel for sending test results to the MQTT publishing task
+    let (result_tx, mut result_rx) = mpsc::channel(1);
 
-    // Channel for reporting test results
-    let (tx, mut rx) = mpsc::channel(32);
+    let mut mqttoptions = MqttOptions::new(&CONFIG.mqtt_id, &CONFIG.mqtt_host, CONFIG.mqtt_port);
+    mqttoptions.set_keep_alive(Duration::from_secs(5));
+    mqttoptions.set_clean_session(true);
+    let (mqtt_client, mut mqtt_connection) = Client::new(mqttoptions, 10);
 
-    // Spawn task to repeatedly perform download tests
-    let download_tx = tx.clone();
-    let download_task = task::spawn(async move {
+    let speed_test_task = task::spawn(async move {
         loop {
-            match perform_download_test().await {
-                Ok(speed) => {
-                    if let Err(err) = download_tx.send(TestResult::Download(speed)).await {
-                        warn!("Failed to send download result: {:?}", err);
-                        break;
+            match perform_all_tests().await {
+                Ok(results) => {
+                    if let Err(err) = result_tx.send(results).await {
+                        warn!("Failed to send test results to MQTT: {:?}", err);
                     }
                 }
-                Err(err) => error!("Download test failed: {:?}", err),
+                Err(err) => error!("Speedtest failed: {:?}", err),
             }
-            sleep(Duration::from_secs(check_interval)).await;
+
+            sleep(Duration::from_secs(CONFIG.check_interval)).await;
         }
     });
 
-    // Spawn task to repeatedly perform upload tests
-    let upload_tx = tx.clone();
-    let upload_task = task::spawn(async move {
-        loop {
-            match perform_upload_test().await {
-                Ok(speed) => {
-                    if let Err(err) = upload_tx.send(TestResult::Upload(speed)).await {
-                        warn!("Failed to send upload result: {:?}", err);
-                        break;
-                    }
+    // Task to manage MQTT publishing and connection
+    let mqtt_publish_task = tokio::spawn(async move {
+        while let Some(results) = result_rx.recv().await {
+            let speed_test_result =
+                SpeedTestResult::new(results.download, results.upload, results.ping);
+
+            let payload = match serde_json::to_string(&speed_test_result) {
+                Ok(string) => string,
+                Err(err) => {
+                    warn!("Failed to serialize SpeedTest result to JSON: {:?}", err);
+                    continue;
                 }
-                Err(err) => warn!("Upload test failed: {:?}", err),
+            };
+
+            match mqtt_client.publish(
+                &CONFIG.mqtt_topic,
+                rumqttc::QoS::AtLeastOnce,
+                false,
+                payload.clone(),
+            ) {
+                Ok(_) => info!("Published Speedtest result to MQTT: {payload}"),
+                Err(err) => error!("MQTT publish error: {:?}", err),
             }
-            sleep(Duration::from_secs(check_interval)).await;
         }
     });
 
-    // Spawn task to repeatedly perform ping tests
-    let ping_tx = tx.clone();
-    let ping_task = task::spawn(async move {
+    // Task to handle MQTT connection events
+    let mqtt_eventloop_task = tokio::spawn(async move {
         loop {
-            match perform_ping_test().await {
-                Ok(ping) => {
-                    if let Err(err) = ping_tx.send(TestResult::Ping(ping)).await {
-                        warn!("Failed to send ping result: {:?}", err);
-                        break;
-                    }
+            match mqtt_connection.eventloop.poll().await {
+                Ok(notification) => {
+                    debug!("Received MQTT event: {:?}", notification);
                 }
-                Err(err) => warn!("Ping test failed: {:?}", err),
+                Err(err) => {
+                    error!("MQTT connection error: {:?}", err);
+                    std::process::exit(1);
+                }
             }
-            sleep(Duration::from_secs(check_interval)).await;
         }
     });
 
-    // Continuously receive and log test results
-    while let Some(result) = rx.recv().await {
-        match result {
-            TestResult::Download(speed) => {
-                info!("Download speed: {:.2} Mbps", speed);
-            }
-            TestResult::Upload(speed) => {
-                info!("Upload speed: {:.2} Mbps", speed);
-            }
-            TestResult::Ping(ping) => {
-                info!("Ping: {:.2} ms", ping);
-            }
-        }
-    }
+    let _ = tokio::join!(speed_test_task, mqtt_publish_task, mqtt_eventloop_task);
+    Ok::<(), ServiceError>(())
+}
 
-    // Await task completion (optional, for cleanup)
-    let _ = tokio::join!(download_task, upload_task, ping_task);
+async fn perform_all_tests() -> Result<TestResults, ServiceError> {
+    let download_task = task::spawn(perform_download_test());
+    let upload_task = task::spawn(perform_upload_test());
+    let ping_task = task::spawn(perform_ping_test());
 
-    Ok(())
+    let (download, upload, ping) = tokio::join!(download_task, upload_task, ping_task);
+
+    // Flatten and process results using a helper function
+    let download = download.map_err(|_| ServiceError::TaskJoinError)??;
+    let upload = upload.map_err(|_| ServiceError::TaskJoinError)??;
+    let ping = ping.map_err(|_| ServiceError::TaskJoinError)??;
+
+    Ok(TestResults {
+        download,
+        upload,
+        ping,
+    })
 }
 
 async fn perform_download_test() -> Result<f64, ServiceError> {
@@ -150,14 +135,11 @@ async fn perform_download_test() -> Result<f64, ServiceError> {
 
 async fn perform_upload_test() -> Result<f64, ServiceError> {
     let result = task::spawn_blocking(|| {
-        let mut config = speedtest::get_configuration()?;
+        let config = speedtest::get_configuration()?;
         let servers = speedtest::get_server_list_with_config(&config)?;
         let best_server = speedtest::get_best_server_based_on_latency(&servers.servers)?;
-        let upload_measurement = speedtest::test_upload_with_progress_and_config(
-            best_server.server,
-            || {},
-            &mut config,
-        )?;
+        let upload_measurement =
+            speedtest::test_upload_with_progress_and_config(best_server.server, || {}, &config)?;
         Ok::<f64, ServiceError>(upload_measurement.bps_f64() / 1_000_000.0) // Convert to Mbps
     })
     .await??;
