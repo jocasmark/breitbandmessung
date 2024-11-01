@@ -63,22 +63,9 @@ Example log output:
 [INFO  speedtest_mqtt] Ping: 27.45 ms
 ```
 
-
 ## Configuration
 
 The `speedtest-mqtt` service can be configured using environment variables. Below are the available configuration options:
-
-## Configuration
-
-The application can be configured through the following environment variables:
-
-# SpeedTest MQTT
-
-A Rust-based service that periodically performs internet speed tests and publishes the results (download, upload, and ping) to an MQTT broker. This service is useful for monitoring internet connection speeds and latency over time and can be integrated into other IoT or data monitoring systems via MQTT.
-
-## Configuration
-
-The application can be configured through the following environment variables:
 
 ### Environment Variables
 
