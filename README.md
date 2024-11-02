@@ -63,32 +63,21 @@ Example log output:
 [INFO  speedtest_mqtt] Ping: 27.45 ms
 ```
 
-
 ## Configuration
 
 The `speedtest-mqtt` service can be configured using environment variables. Below are the available configuration options:
-
-## Configuration
-
-The application can be configured through the following environment variables:
-
-# SpeedTest MQTT
-
-A Rust-based service that periodically performs internet speed tests and publishes the results (download, upload, and ping) to an MQTT broker. This service is useful for monitoring internet connection speeds and latency over time and can be integrated into other IoT or data monitoring systems via MQTT.
-
-## Configuration
-
-The application can be configured through the following environment variables:
 
 ### Environment Variables
 
 | Variable         | Default             | Description                                                                |
 |------------------|---------------------|----------------------------------------------------------------------------|
 | `CHECK_INTERVAL` | `60`                | Interval (in seconds) between each speed test (download, upload, ping).    |
-| `MQTT_ID`        | `speedtest`         | The unique identifier for the MQTT client.                                |
-| `MQTT_TOPIC`     | `speedtest/results` | The topic to publish to MQTT.                                             |
-| `MQTT_HOST`      | `localhost`         | The hostname or IP address of the MQTT broker.                            |
-| `MQTT_PORT`      | `1883`              | The port on which the MQTT broker is running.                             |
+| `MQTT_ID`        | `speedtest`         | The unique identifier for the MQTT client.                                 |
+| `MQTT_TOPIC`     | `speedtest/results` | The topic to publish to MQTT.                                              |
+| `MQTT_HOST`      | `localhost`         | The hostname or IP address of the MQTT broker.                             |
+| `MQTT_PORT`      | `1883`              | The port on which the MQTT broker is running.                              |
+| `MQTT_USERNAME`  | `None`              | The username to publish to MQTT.                                           |
+| `MQTT_PASSWORD`  | `None`              | The password to publish to MQTT.                                           |
 | `LOG_LEVEL`      | `info`              | The log level for the application (`trace`, `debug`, `info`, `warn`, `error`). Adjusts the verbosity of log output for monitoring or debugging purposes. |
 
 ### Example Configuration
@@ -103,6 +92,8 @@ MQTT_ID=speedtest
 MQTT_TOPIC=speedtest/results
 MQTT_HOST=broker.example.com
 MQTT_PORT=1883
+MQTT_USERNAME=user
+MQTT_PASSWORD=password
 LOG_LEVEL=info
 ```
 
@@ -123,6 +114,8 @@ services:
       - MQTT_TOPIC=speedtest/resulst   # Sets the MQTT topic to be published to
       - MQTT_HOST=broker.example.com   # The MQTT broker's hostname or IP address
       - MQTT_PORT=1883                 # The MQTT broker's port
+      - MQTT_USERNAME=user             # The MQTT broker's username
+      - MQTT_PASSWORD=password         # The MQTT broker's password
       - LOG_LEVEL=info                 # Sets the logging level (e.g., info, debug, warn)
 ```
 

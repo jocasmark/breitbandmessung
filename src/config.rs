@@ -9,6 +9,8 @@ pub struct Config {
     pub mqtt_topic: String,
     pub mqtt_host: String,
     pub mqtt_port: u16,
+    pub mqtt_username: Option<String>,
+    pub mqtt_password: Option<String>,
     pub log_level: LevelFilter,
 }
 
@@ -22,6 +24,8 @@ impl Config {
             mqtt_id: env::var("MQTT_ID").unwrap_or_else(|_| "speedtest".to_string()),
             mqtt_topic: env::var("MQTT_TOPIC").unwrap_or_else(|_| "speedtest/results".to_string()),
             mqtt_host: env::var("MQTT_HOST").unwrap_or_else(|_| "localhost".to_string()),
+            mqtt_username: env::var("MQTT_USERNAME").ok(),
+            mqtt_password: env::var("MQTT_PASSWORD").ok(),
             mqtt_port: env::var("MQTT_PORT")
                 .ok()
                 .and_then(|val| val.parse::<u16>().ok())
