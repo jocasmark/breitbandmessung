@@ -36,6 +36,9 @@ async fn main() -> Result<(), ServiceError> {
     let mut mqttoptions = MqttOptions::new(&CONFIG.mqtt_id, &CONFIG.mqtt_host, CONFIG.mqtt_port);
     mqttoptions.set_keep_alive(Duration::from_secs(5));
     mqttoptions.set_clean_session(true);
+    if let (Some(username), Some(password)) = (&CONFIG.mqtt_username, &CONFIG.mqtt_password) {
+        mqttoptions.set_credentials(username, password);
+    }
     let (mqtt_client, mut mqtt_connection) = Client::new(mqttoptions, 10);
 
     let speed_test_task = task::spawn(async move {
