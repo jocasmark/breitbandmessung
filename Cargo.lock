@@ -146,6 +146,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b048fb63fd8b5923fc5aa7b340d8e156aec7ec02f0c78fa8a6ddc2613f6f71de"
 
 [[package]]
+name = "breitbandmessung"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "env_logger",
+ "lazy_static",
+ "log",
+ "openssl",
+ "rumqttc",
+ "serde",
+ "serde_json",
+ "speedtest-rs",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1391,24 +1409,6 @@ dependencies = [
  "roxmltree",
  "serde",
  "url",
-]
-
-[[package]]
-name = "speedtest_mqtt"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "env_logger",
- "lazy_static",
- "log",
- "openssl",
- "rumqttc",
- "serde",
- "serde_json",
- "speedtest-rs",
- "thiserror",
- "tokio",
 ]
 
 [[package]]

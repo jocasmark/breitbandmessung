@@ -1,8 +1,8 @@
 version: '3.8'
 services:
-  speedtest:
-    image: jocas/speedtest-mqtt:latest
-    container_name: speedtest
+  breitbandmessung:
+    image: jocas/breitbandmessung:latest
+    container_name: breitbandmessung
     environment:
       - CHECK_INTERVAL=60
       - MQTT_ID=speedtest

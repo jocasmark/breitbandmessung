@@ -19,6 +19,6 @@ FROM scratch
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
 # Copy the compiled binary
-COPY --from=builder /usr/src/app/target/x86_64-unknown-linux-musl/release/speedtest_mqtt /usr/local/bin/speedtest_mqtt
+COPY --from=builder /usr/src/app/target/x86_64-unknown-linux-musl/release/breitbandmessung /usr/local/bin/breitbandmessung
 
-CMD ["speedtest_mqtt"]
+CMD ["breitbandmessung"]

@@ -1,5 +1,5 @@
 
-# SpeedTest-MQTT
+# Breitbandmessung
 
 This application measures internet speed (download, upload, and ping) and logs the results periodically. 
 It uses the `speedtest-rs` library for conducting the speed tests and sends the results over MQTT.
@@ -23,14 +23,14 @@ The application logs the speed test results every 60 seconds and handles errors 
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/jocasmark/speedtest_mqtt.git
-   cd speedtest-mqtt
+   git clone https://github.com/jocasmark/breitbandmessung.git
+   cd breitbandmessung
    ```
 
 2. Build and run the application:
    ```bash
    cargo build --release
-   ./target/release/speedtest_mqtt
+   ./target/release/breitbandmessung
    ```
 
 ### Docker Deployment
@@ -39,7 +39,7 @@ The application is Docker-ready for cross-platform builds and optimized for a `s
 
 1. **Build the Docker Image**:
    ```bash
-   docker build -t jocas/speedtest-mqtt .
+   docker build -t jocas/breitbandmessung .
    ```
 
 2. **Run with Docker Compose**:
@@ -58,26 +58,26 @@ The service logs results every minute for:
 
 Example log output:
 ```plaintext
-[INFO  speedtest_mqtt] Download speed: 50.23 Mbps
-[INFO  speedtest_mqtt] Upload speed: 10.75 Mbps
-[INFO  speedtest_mqtt] Ping: 27.45 ms
+[INFO  breitbandmessung] Download speed: 50.23 Mbps
+[INFO  breitbandmessung] Upload speed: 10.75 Mbps
+[INFO  breitbandmessung] Ping: 27.45 ms
 ```
 
 ## Configuration
 
-The `speedtest-mqtt` service can be configured using environment variables. Below are the available configuration options:
+The `breitbandmessung` service can be configured using environment variables. Below are the available configuration options:
 
 ### Environment Variables
 
 | Variable         | Default             | Description                                                                |
 |------------------|---------------------|----------------------------------------------------------------------------|
 | `CHECK_INTERVAL` | `60`                | Interval (in seconds) between each speed test (download, upload, ping).    |
-| `MQTT_ID`        | `speedtest`         | The unique identifier for the MQTT client.                                 |
-| `MQTT_TOPIC`     | `speedtest/results` | The topic to publish to MQTT.                                              |
+| `MQTT_ID`        | `breitbandmessung`         | The unique identifier for the MQTT client.                                 |
+| `MQTT_TOPIC`     | `breitbandmessung/results` | The topic to publish to MQTT.                                              |
 | `MQTT_HOST`      | `localhost`         | The hostname or IP address of the MQTT broker.                             |
 | `MQTT_PORT`      | `1883`              | The port on which the MQTT broker is running.                              |
-| `MQTT_USERNAME`  | `None`              | The username to publish to MQTT.                                           |
-| `MQTT_PASSWORD`  | `None`              | The password to publish to MQTT.                                           |
+| `MQTT_USERNAME`  | `None`              | Optional username for authenticating with the MQTT broker.                                          |
+| `MQTT_PASSWORD`  | `None`              | Optional password associated with `MQTT_USERNAME` for secure access to the MQTT broker.                                       |
 | `LOG_LEVEL`      | `info`              | The log level for the application (`trace`, `debug`, `info`, `warn`, `error`). Adjusts the verbosity of log output for monitoring or debugging purposes. |
 
 ### Example Configuration
@@ -88,8 +88,8 @@ To set environment variables, you can use a `.env` file or set them directly in 
 
 ```plaintext
 CHECK_INTERVAL=120
-MQTT_ID=speedtest
-MQTT_TOPIC=speedtest/results
+MQTT_ID=breitbandmessung
+MQTT_TOPIC=breitbandmessung/results
 MQTT_HOST=broker.example.com
 MQTT_PORT=1883
 MQTT_USERNAME=user
@@ -97,7 +97,7 @@ MQTT_PASSWORD=password
 LOG_LEVEL=info
 ```
 
-This setup will run speed tests every 120 seconds, connect to an MQTT broker at `broker.example.com` on port `1883`, publish to topic `speedtest/results`, and produce log output at the `info` level.
+This setup will run speed tests every 120 seconds, connect to an MQTT broker at `broker.example.com` on port `1883`, publish to topic `breitbandmessung/results`, and produce log output at the `info` level.
 
 ### Example Configuration in `docker-compose.yml`
 
@@ -107,15 +107,15 @@ You can set environment variables in your `docker-compose.yml` file like this:
 version: '3.8'
 services:
   speed_test:
-    image: jocas/speedtest-mqtt
+    image: jocas/breitbandmessung
     environment:
       - CHECK_INTERVAL=120             # Runs the speed test every 120 seconds
       - MQTT_ID=speedtest              # Sets the MQTT client ID
       - MQTT_TOPIC=speedtest/resulst   # Sets the MQTT topic to be published to
       - MQTT_HOST=broker.example.com   # The MQTT broker's hostname or IP address
       - MQTT_PORT=1883                 # The MQTT broker's port
-      - MQTT_USERNAME=user             # The MQTT broker's username
-      - MQTT_PASSWORD=password         # The MQTT broker's password
+      - MQTT_USERNAME=user             # The MQTT broker's username (if required)
+      - MQTT_PASSWORD=password         # The MQTT broker's password (if required)
       - LOG_LEVEL=info                 # Sets the logging level (e.g., info, debug, warn)
 ```
 

@@ -1,5 +1,5 @@
 # Define variables
-DOCKER_IMAGE = jocas/speedtest-mqtt
+DOCKER_IMAGE = jocas/breitbandmessung
 DOCKER_COMPOSE = docker-compose.yml
 CHECK_INTERVAL ?= 60
 
