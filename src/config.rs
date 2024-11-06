@@ -6,7 +6,6 @@ use log::LevelFilter;
 pub struct Config {
     pub check_interval: u64,
     pub mqtt_id: String,
-    pub mqtt_topic: String,
     pub mqtt_host: String,
     pub mqtt_port: u16,
     pub mqtt_username: Option<String>,
@@ -22,7 +21,6 @@ impl Config {
                 .and_then(|val| val.parse::<u64>().ok())
                 .unwrap_or(60),
             mqtt_id: env::var("MQTT_ID").unwrap_or_else(|_| "speedtest".to_string()),
-            mqtt_topic: env::var("MQTT_TOPIC").unwrap_or_else(|_| "speedtest/results".to_string()),
             mqtt_host: env::var("MQTT_HOST").unwrap_or_else(|_| "localhost".to_string()),
             mqtt_username: env::var("MQTT_USERNAME").ok(),
             mqtt_password: env::var("MQTT_PASSWORD").ok(),
