@@ -2,7 +2,7 @@ use config::Config;
 use errors::ServiceError;
 use lazy_static::lazy_static;
 use log::{debug, error, info, warn};
-use models::SpeedTestResult;
+use models::{MqttMessage, SpeedTestResult};
 use rumqttc::{Client, MqttOptions};
 use speedtest_rs::speedtest;
 use tokio::{
@@ -59,25 +59,28 @@ async fn main() -> Result<(), ServiceError> {
     // Task to manage MQTT publishing and connection
     let mqtt_publish_task = tokio::spawn(async move {
         while let Some(results) = result_rx.recv().await {
-            let speed_test_result =
-                SpeedTestResult::new(results.download, results.upload, results.ping);
+            let speed_test_messages: Vec<MqttMessage> =
+                SpeedTestResult::new(results.download, results.upload, results.ping).into();
 
-            let payload = match serde_json::to_string(&speed_test_result) {
-                Ok(string) => string,
-                Err(err) => {
-                    warn!("Failed to serialize SpeedTest result to JSON: {:?}", err);
-                    continue;
+            // Publish each message individually
+            for message in speed_test_messages {
+                let payload = match serde_json::to_string(&message) {
+                    Ok(string) => string,
+                    Err(err) => {
+                        warn!("Failed to serialize SpeedTest message to JSON: {:?}", err);
+                        continue;
+                    }
+                };
+
+                match mqtt_client.publish(
+                    &message.state_topic,
+                    rumqttc::QoS::AtLeastOnce,
+                    false,
+                    payload.clone(),
+                ) {
+                    Ok(_) => info!("Published Speedtest result to MQTT: {payload}"),
+                    Err(err) => error!("MQTT publish error: {:?}", err),
                 }
-            };
-
-            match mqtt_client.publish(
-                &CONFIG.mqtt_topic,
-                rumqttc::QoS::AtLeastOnce,
-                false,
-                payload.clone(),
-            ) {
-                Ok(_) => info!("Published Speedtest result to MQTT: {payload}"),
-                Err(err) => error!("MQTT publish error: {:?}", err),
             }
         }
     });
