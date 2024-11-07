@@ -1,3 +1,8 @@
+use std::sync::Arc;
+
+use askama::Template;
+use axum::{extract::State, response::{Html, IntoResponse}, routing::get, Json, Router};
+use chrono::Utc;
 use config::Config;
 use errors::ServiceError;
 use lazy_static::lazy_static;
@@ -6,7 +11,7 @@ use models::{MqttMessage, SpeedTestResult};
 use rumqttc::{Client, MqttOptions};
 use speedtest_rs::speedtest;
 use tokio::{
-    sync::mpsc,
+    sync::{mpsc, RwLock},
     task,
     time::{sleep, Duration},
 };
@@ -26,83 +31,133 @@ struct TestResults {
     ping: f64,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), ServiceError> {
-    env_logger::builder().filter_level(CONFIG.log_level).init();
-
-    // Channel for sending test results to the MQTT publishing task
-    let (result_tx, mut result_rx) = mpsc::channel(1);
-
-    let mut mqttoptions = MqttOptions::new(&CONFIG.mqtt_id, &CONFIG.mqtt_host, CONFIG.mqtt_port);
-    mqttoptions.set_keep_alive(Duration::from_secs(5));
-    mqttoptions.set_clean_session(true);
-    if let (Some(username), Some(password)) = (&CONFIG.mqtt_username, &CONFIG.mqtt_password) {
-        mqttoptions.set_credentials(username, password);
-    }
-    let (mqtt_client, mut mqtt_connection) = Client::new(mqttoptions, 10);
-
-    let speed_test_task = task::spawn(async move {
-        loop {
-            match perform_all_tests().await {
-                Ok(results) => {
-                    if let Err(err) = result_tx.send(results).await {
-                        warn!("Failed to send test results to MQTT: {:?}", err);
-                    }
-                }
-                Err(err) => error!("Speedtest failed: {:?}", err),
-            }
-
-            sleep(Duration::from_secs(CONFIG.check_interval)).await;
-        }
-    });
-
-    // Task to manage MQTT publishing and connection
-    let mqtt_publish_task = tokio::spawn(async move {
-        while let Some(results) = result_rx.recv().await {
-            let speed_test_messages: Vec<MqttMessage> =
-                SpeedTestResult::new(results.download, results.upload, results.ping).into();
-
-            // Publish each message individually
-            for message in speed_test_messages {
-                let payload = match serde_json::to_string(&message) {
-                    Ok(string) => string,
-                    Err(err) => {
-                        warn!("Failed to serialize SpeedTest message to JSON: {:?}", err);
-                        continue;
-                    }
-                };
-
-                match mqtt_client.publish(
-                    &message.state_topic,
-                    rumqttc::QoS::AtLeastOnce,
-                    false,
-                    payload.clone(),
-                ) {
-                    Ok(_) => info!("Published Speedtest result to MQTT: {payload}"),
-                    Err(err) => error!("MQTT publish error: {:?}", err),
-                }
-            }
-        }
-    });
-
-    // Task to handle MQTT connection events
-    let mqtt_eventloop_task = tokio::spawn(async move {
-        loop {
-            match mqtt_connection.eventloop.poll().await {
-                Ok(notification) => {
-                    debug!("Received MQTT event: {:?}", notification);
-                }
-                Err(err) => {
-                    error!("MQTT connection error: {:?}", err);
-                    std::process::exit(1);
-                }
-            }
-        }
-    });
-
-    let _ = tokio::join!(speed_test_task, mqtt_publish_task, mqtt_eventloop_task);
-    Ok::<(), ServiceError>(())
+#[derive(Template)]
+#[template(path = "index.html")]
+struct IndexTemplate {
+    entries: Vec<SpeedTestResult>,
 }
+
+async fn index(State(data): State<SharedData>)  -> impl IntoResponse {
+    let data = data.read().await;
+    let template = IndexTemplate {
+        entries: data.clone(),
+    };
+    Html(template.render().unwrap())
+}
+
+#[tokio::main]
+async fn main() {
+    // Sample data setup
+    let shared_data = Arc::new(RwLock::new(vec![
+        SpeedTestResult {
+            timestamp: Utc::now(),
+            download: 100.0,
+            upload: 20.0,
+            ping: 10.0,
+        },
+        SpeedTestResult {
+            timestamp: Utc::now(),
+            download: 95.0,
+            upload: 18.0,
+            ping: 11.0,
+        },
+    ]));
+
+    let app = Router::new()
+        .route("/", get(index))
+        .with_state(shared_data.clone());
+
+    // Bind to the desired address
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
+
+    // Serve the application
+    axum::serve(listener, app).await.unwrap();
+}
+
+type SharedData = Arc<RwLock<Vec<SpeedTestResult>>>;
+
+async fn get_csv_data(data: SharedData) -> Json<Vec<SpeedTestResult>> {
+    let data = data.read().await;
+    Json(data.clone())
+}
+
+// #[tokio::main]
+// async fn main() -> Result<(), ServiceError> {
+//     env_logger::builder().filter_level(CONFIG.log_level).init();
+
+//     // Channel for sending test results to the MQTT publishing task
+//     let (result_tx, mut result_rx) = mpsc::channel(1);
+
+//     let mut mqttoptions = MqttOptions::new(&CONFIG.mqtt_id, &CONFIG.mqtt_host, CONFIG.mqtt_port);
+//     mqttoptions.set_keep_alive(Duration::from_secs(5));
+//     mqttoptions.set_clean_session(true);
+//     if let (Some(username), Some(password)) = (&CONFIG.mqtt_username, &CONFIG.mqtt_password) {
+//         mqttoptions.set_credentials(username, password);
+//     }
+//     let (mqtt_client, mut mqtt_connection) = Client::new(mqttoptions, 10);
+
+//     let speed_test_task = task::spawn(async move {
+//         loop {
+//             match perform_all_tests().await {
+//                 Ok(results) => {
+//                     if let Err(err) = result_tx.send(results).await {
+//                         warn!("Failed to send test results to MQTT: {:?}", err);
+//                     }
+//                 }
+//                 Err(err) => error!("Speedtest failed: {:?}", err),
+//             }
+
+//             sleep(Duration::from_secs(CONFIG.check_interval)).await;
+//         }
+//     });
+
+//     // Task to manage MQTT publishing and connection
+//     let mqtt_publish_task = tokio::spawn(async move {
+//         while let Some(results) = result_rx.recv().await {
+//             let speed_test_messages: Vec<MqttMessage> =
+//                 SpeedTestResult::new(results.download, results.upload, results.ping).into();
+
+//             // Publish each message individually
+//             for message in speed_test_messages {
+//                 let payload = match serde_json::to_string(&message) {
+//                     Ok(string) => string,
+//                     Err(err) => {
+//                         warn!("Failed to serialize SpeedTest message to JSON: {:?}", err);
+//                         continue;
+//                     }
+//                 };
+
+//                 match mqtt_client.publish(
+//                     &message.state_topic,
+//                     rumqttc::QoS::AtLeastOnce,
+//                     false,
+//                     payload.clone(),
+//                 ) {
+//                     Ok(_) => info!("Published Speedtest result to MQTT: {payload}"),
+//                     Err(err) => error!("MQTT publish error: {:?}", err),
+//                 }
+//             }
+//         }
+//     });
+
+//     // Task to handle MQTT connection events
+//     let mqtt_eventloop_task = tokio::spawn(async move {
+//         loop {
+//             match mqtt_connection.eventloop.poll().await {
+//                 Ok(notification) => {
+//                     debug!("Received MQTT event: {:?}", notification);
+//                 }
+//                 Err(err) => {
+//                     error!("MQTT connection error: {:?}", err);
+//                     std::process::exit(1);
+//                 }
+//             }
+//         }
+//     });
+
+//     let _ = tokio::join!(speed_test_task, mqtt_publish_task, mqtt_eventloop_task);
+//     Ok::<(), ServiceError>(())
+// }
 
 async fn perform_all_tests() -> Result<TestResults, ServiceError> {
     let download_task = task::spawn(perform_download_test());

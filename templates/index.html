@@ -1,0 +1,21 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Breitbandmessung</title>
+</head>
+<body>
+    <h1>Breitbandmessung Data</h1>
+    <table id="data-table">
+        <tr><th>Timestamp</th><th>Download Speed (Mbps)</th><th>Upload Speed (Mbps)</th><th>Ping (ms)</th></tr>
+        {% for entry in entries %}
+            <tr>
+                <td>{{ entry.timestamp }}</td>
+                <td>{{ entry.download }}</td>
+                <td>{{ entry.upload }}</td>
+                <td>{{ entry.ping }}</td>
+            </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
