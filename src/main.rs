@@ -66,19 +66,26 @@ async fn main() -> Result<(), ServiceError> {
         };
 
         while let Some(results) = result_rx.recv().await {
-            // Convert the SpeedTestResult into MqttMessage
-            let message: MqttMessage =
+            let speed_test_messages: Vec<MqttMessage> =
                 SpeedTestResult::new(results.download, results.upload, results.ping).into();
 
-            // Publish the message payload (which contains all values as a JSON string)
-            match mqtt_client.publish(
-                &message.state_topic,
-                rumqttc::QoS::AtLeastOnce,
-                false,
-                message.payload.clone(),
-            ) {
-                Ok(_) => info!("Published Speedtest result to MQTT: {}", message.payload),
-                Err(err) => error!("MQTT publish error: {:?}", err),
+            // Publish each message individually
+            // Publish only the numeric values to each `state_topic`
+            for message in speed_test_messages {
+                let payload = message.value_template.to_string(); // Send only the numeric value as a string
+
+                match mqtt_client.publish(
+                    &message.state_topic,
+                    rumqttc::QoS::AtLeastOnce,
+                    false,
+                    payload,
+                ) {
+                    Ok(_) => info!(
+                        "Published Speedtest result to MQTT: {} to topic {}",
+                        message.value_template, message.state_topic
+                    ),
+                    Err(err) => error!("MQTT publish error: {:?}", err),
+                }
             }
         }
     });
@@ -166,23 +173,66 @@ async fn perform_ping_test() -> Result<f64, ServiceError> {
 }
 
 async fn publish_discovery_message(client: &Client) -> Result<(), rumqttc::ClientError> {
-    let config_message = json!({
-        "name": "Speedtest Results",
-        "state_topic": "homeassistant/sensor/speedtest/state",
-        "json_attributes_topic": "homeassistant/sensor/speedtest/attributes",
-        "device_class": "measurement",
-        "value_template": "{{ value_json.status }}",
-        "unique_id": "speedtest_results",
+    let download_config = json!({
+        "name": "Speedtest Download",
+        "state_topic": "homeassistant/sensor/speedtest/download",
+        "device_class": "data_rate",
+        "unit_of_measurement": "Mbit/s",
+        "value_template": "{{ value }}",
+        "unique_id": "speedtest_download",
         "device": {
             "name": "Speedtest",
             "identifiers": ["speedtest_device"]
         }
     });
 
+    let upload_config = json!({
+        "name": "Speedtest Upload",
+        "state_topic": "homeassistant/sensor/speedtest/upload",
+        "device_class": "data_rate",
+        "unit_of_measurement": "Mbit/s",
+        "value_template": "{{ value }}",
+        "unique_id": "speedtest_upload",
+        "device": {
+            "name": "Speedtest",
+            "identifiers": ["speedtest_device"]
+        }
+    });
+
+    let ping_config = json!({
+        "name": "Speedtest Ping",
+        "state_topic": "homeassistant/sensor/speedtest/ping",
+        "device_class": "duration",
+        "unit_of_measurement": "ms",
+        "value_template": "{{ value }}",
+        "unique_id": "speedtest_ping",
+        "device": {
+            "name": "Speedtest",
+            "identifiers": ["speedtest_device"]
+        }
+    });
+
+    // Publish each discovery message
     client.publish(
-        "homeassistant/sensor/speedtest/config",
+        "homeassistant/sensor/speedtest/download/config",
         QoS::AtLeastOnce,
         true,
-        config_message.to_string(),
-    )
+        download_config.to_string(),
+    )?;
+
+    client.publish(
+        "homeassistant/sensor/speedtest/upload/config",
+        QoS::AtLeastOnce,
+        true,
+        upload_config.to_string(),
+    )?;
+
+    client.publish(
+        "homeassistant/sensor/speedtest/ping/config",
+        QoS::AtLeastOnce,
+        true,
+        ping_config.to_string(),
+    )?;
+
+    Ok(())
 }
