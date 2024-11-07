@@ -3,7 +3,8 @@ use errors::ServiceError;
 use lazy_static::lazy_static;
 use log::{debug, error, info, warn};
 use models::{MqttMessage, SpeedTestResult};
-use rumqttc::{Client, MqttOptions};
+use rumqttc::{Client, MqttOptions, QoS};
+use serde_json::json;
 use speedtest_rs::speedtest;
 use tokio::{
     sync::mpsc,
@@ -58,29 +59,26 @@ async fn main() -> Result<(), ServiceError> {
 
     // Task to manage MQTT publishing and connection
     let mqtt_publish_task = tokio::spawn(async move {
+        // Publish discovery message for Home Assistant auto-discovery
+        match publish_discovery_message(&mqtt_client).await {
+            Ok(_) => info!("Published Speedtest disovery message to MQTT"),
+            Err(err) => error!("MQTT disovery message publish error: {:?}", err),
+        };
+
         while let Some(results) = result_rx.recv().await {
-            let speed_test_messages: Vec<MqttMessage> =
+            // Convert the SpeedTestResult into MqttMessage
+            let message: MqttMessage =
                 SpeedTestResult::new(results.download, results.upload, results.ping).into();
 
-            // Publish each message individually
-            for message in speed_test_messages {
-                let payload = match serde_json::to_string(&message) {
-                    Ok(string) => string,
-                    Err(err) => {
-                        warn!("Failed to serialize SpeedTest message to JSON: {:?}", err);
-                        continue;
-                    }
-                };
-
-                match mqtt_client.publish(
-                    &message.state_topic,
-                    rumqttc::QoS::AtLeastOnce,
-                    false,
-                    payload.clone(),
-                ) {
-                    Ok(_) => info!("Published Speedtest result to MQTT: {payload}"),
-                    Err(err) => error!("MQTT publish error: {:?}", err),
-                }
+            // Publish the message payload (which contains all values as a JSON string)
+            match mqtt_client.publish(
+                &message.state_topic,
+                rumqttc::QoS::AtLeastOnce,
+                false,
+                message.payload.clone(),
+            ) {
+                Ok(_) => info!("Published Speedtest result to MQTT: {}", message.payload),
+                Err(err) => error!("MQTT publish error: {:?}", err),
             }
         }
     });
@@ -165,4 +163,26 @@ async fn perform_ping_test() -> Result<f64, ServiceError> {
     .await??;
 
     Ok(result * 1000.0) // Convert to milliseconds
+}
+
+async fn publish_discovery_message(client: &Client) -> Result<(), rumqttc::ClientError> {
+    let config_message = json!({
+        "name": "Speedtest Results",
+        "state_topic": "homeassistant/sensor/speedtest/state",
+        "json_attributes_topic": "homeassistant/sensor/speedtest/attributes",
+        "device_class": "measurement",
+        "value_template": "{{ value_json.status }}",
+        "unique_id": "speedtest_results",
+        "device": {
+            "name": "Speedtest",
+            "identifiers": ["speedtest_device"]
+        }
+    });
+
+    client.publish(
+        "homeassistant/sensor/speedtest/config",
+        QoS::AtLeastOnce,
+        true,
+        config_message.to_string(),
+    )
 }
