@@ -33,19 +33,19 @@ impl From<SpeedTestResult> for Vec<MqttMessage> {
         vec![
             MqttMessage {
                 name: "Speedtest Download".to_string(),
-                state_topic: "homeassistant/sensor/Speedtest/Download".to_string(),
-                unit_of_measurement: "Mbps".to_string(),
+                state_topic: "homeassistant/sensor/speedtest/download".to_string(),
+                unit_of_measurement: "Mbit/s".to_string(),
                 value_template: result.download,
             },
             MqttMessage {
                 name: "Speedtest Upload".to_string(),
-                state_topic: "homeassistant/sensor/Speedtest/Upload".to_string(),
-                unit_of_measurement: "Mbps".to_string(),
+                state_topic: "homeassistant/sensor/speedtest/upload".to_string(),
+                unit_of_measurement: "Mbit/s".to_string(),
                 value_template: result.upload,
             },
             MqttMessage {
                 name: "Speedtest Ping".to_string(),
-                state_topic: "homeassistant/sensor/Speedtest/Ping".to_string(),
+                state_topic: "homeassistant/sensor/speedtest/ping".to_string(),
                 unit_of_measurement: "ms".to_string(),
                 value_template: result.ping,
             },

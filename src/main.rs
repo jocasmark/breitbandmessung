@@ -3,7 +3,8 @@ use errors::ServiceError;
 use lazy_static::lazy_static;
 use log::{debug, error, info, warn};
 use models::{MqttMessage, SpeedTestResult};
-use rumqttc::{Client, MqttOptions};
+use rumqttc::{Client, MqttOptions, QoS};
+use serde_json::json;
 use speedtest_rs::speedtest;
 use tokio::{
     sync::mpsc,
@@ -58,27 +59,31 @@ async fn main() -> Result<(), ServiceError> {
 
     // Task to manage MQTT publishing and connection
     let mqtt_publish_task = tokio::spawn(async move {
+        // Publish discovery message for Home Assistant auto-discovery
+        match publish_discovery_message(&mqtt_client).await {
+            Ok(_) => info!("Published Speedtest disovery message to MQTT"),
+            Err(err) => error!("MQTT disovery message publish error: {:?}", err),
+        };
+
         while let Some(results) = result_rx.recv().await {
             let speed_test_messages: Vec<MqttMessage> =
                 SpeedTestResult::new(results.download, results.upload, results.ping).into();
 
             // Publish each message individually
+            // Publish only the numeric values to each `state_topic`
             for message in speed_test_messages {
-                let payload = match serde_json::to_string(&message) {
-                    Ok(string) => string,
-                    Err(err) => {
-                        warn!("Failed to serialize SpeedTest message to JSON: {:?}", err);
-                        continue;
-                    }
-                };
+                let payload = message.value_template.to_string(); // Send only the numeric value as a string
 
                 match mqtt_client.publish(
                     &message.state_topic,
                     rumqttc::QoS::AtLeastOnce,
                     false,
-                    payload.clone(),
+                    payload,
                 ) {
-                    Ok(_) => info!("Published Speedtest result to MQTT: {payload}"),
+                    Ok(_) => info!(
+                        "Published Speedtest result to MQTT: {} to topic {}",
+                        message.value_template, message.state_topic
+                    ),
                     Err(err) => error!("MQTT publish error: {:?}", err),
                 }
             }
@@ -165,4 +170,69 @@ async fn perform_ping_test() -> Result<f64, ServiceError> {
     .await??;
 
     Ok(result * 1000.0) // Convert to milliseconds
+}
+
+async fn publish_discovery_message(client: &Client) -> Result<(), rumqttc::ClientError> {
+    let download_config = json!({
+        "name": "Speedtest Download",
+        "state_topic": "homeassistant/sensor/speedtest/download",
+        "device_class": "data_rate",
+        "unit_of_measurement": "Mbit/s",
+        "value_template": "{{ value }}",
+        "unique_id": "speedtest_download",
+        "device": {
+            "name": "Speedtest",
+            "identifiers": ["speedtest_device"]
+        }
+    });
+
+    let upload_config = json!({
+        "name": "Speedtest Upload",
+        "state_topic": "homeassistant/sensor/speedtest/upload",
+        "device_class": "data_rate",
+        "unit_of_measurement": "Mbit/s",
+        "value_template": "{{ value }}",
+        "unique_id": "speedtest_upload",
+        "device": {
+            "name": "Speedtest",
+            "identifiers": ["speedtest_device"]
+        }
+    });
+
+    let ping_config = json!({
+        "name": "Speedtest Ping",
+        "state_topic": "homeassistant/sensor/speedtest/ping",
+        "device_class": "duration",
+        "unit_of_measurement": "ms",
+        "value_template": "{{ value }}",
+        "unique_id": "speedtest_ping",
+        "device": {
+            "name": "Speedtest",
+            "identifiers": ["speedtest_device"]
+        }
+    });
+
+    // Publish each discovery message
+    client.publish(
+        "homeassistant/sensor/speedtest/download/config",
+        QoS::AtLeastOnce,
+        true,
+        download_config.to_string(),
+    )?;
+
+    client.publish(
+        "homeassistant/sensor/speedtest/upload/config",
+        QoS::AtLeastOnce,
+        true,
+        upload_config.to_string(),
+    )?;
+
+    client.publish(
+        "homeassistant/sensor/speedtest/ping/config",
+        QoS::AtLeastOnce,
+        true,
+        ping_config.to_string(),
+    )?;
+
+    Ok(())
 }
