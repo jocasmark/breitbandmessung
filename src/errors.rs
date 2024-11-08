@@ -1,3 +1,4 @@
+use rumqttc::ClientError;
 use speedtest_rs::error::SpeedTestError;
 use thiserror::Error;
 use tokio::task::JoinError;
@@ -6,6 +7,8 @@ use tokio::task::JoinError;
 pub enum ServiceError {
     #[error("Task join error")]
     TaskJoinError,
+    #[error("MQTT client error: {0}")]
+    MqttClientError(#[from] ClientError),
     #[error("SpeedTest error: {0:?}")]
     SpeedTest(SpeedTestError),
 }
