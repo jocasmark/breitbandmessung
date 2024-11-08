@@ -1,3 +1,4 @@
+use log::debug;
 use speedtest_rs::speedtest;
 use tokio::task;
 
@@ -27,6 +28,7 @@ async fn perform_download_test() -> Result<f64, ServiceError> {
         let mut config = speedtest::get_configuration()?;
         let servers = speedtest::get_server_list_with_config(&config)?;
         let best_server = speedtest::get_best_server_based_on_latency(&servers.servers)?;
+        debug!("Performing download test to server {:?}", best_server.server);
         let download_measurement = speedtest::test_download_with_progress_and_config(
             best_server.server,
             || {},
@@ -43,6 +45,7 @@ async fn perform_upload_test() -> Result<f64, ServiceError> {
         let config = speedtest::get_configuration()?;
         let servers = speedtest::get_server_list_with_config(&config)?;
         let best_server = speedtest::get_best_server_based_on_latency(&servers.servers)?;
+        debug!("Performing upload test to server {:?}", best_server.server);
         let upload_measurement =
             speedtest::test_upload_with_progress_and_config(best_server.server, || {}, &config)?;
         // TODO: Remove 2.0 multiplier once this issue is fixed upstream: https://github.com/nelsonjchen/speedtest-rs/issues/140
@@ -59,6 +62,7 @@ async fn perform_ping_test() -> Result<f64, ServiceError> {
             speedtest::get_server_list_with_config(&config).map_err(ServiceError::from)?;
         let best_server = speedtest::get_best_server_based_on_latency(&servers.servers)
             .map_err(ServiceError::from)?;
+        debug!("Performing ping test to server {:?}", best_server.server);
 
         Ok::<f64, ServiceError>(best_server.latency.as_secs_f64())
     })
