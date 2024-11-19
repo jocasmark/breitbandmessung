@@ -48,8 +48,7 @@ async fn perform_upload_test() -> Result<f64, ServiceError> {
         debug!("Performing upload test to server {:?}", best_server.server);
         let upload_measurement =
             speedtest::test_upload_with_progress_and_config(best_server.server, || {}, &config)?;
-        // TODO: Remove 2.0 multiplier once this issue is fixed upstream: https://github.com/nelsonjchen/speedtest-rs/issues/140
-        Ok::<f64, ServiceError>(upload_measurement.bps_f64() / 1_000_000.0 * 2.0) // Convert to Mbps
+        Ok::<f64, ServiceError>(upload_measurement.bps_f64() / 1_000_000.0) // Convert to Mbps
     })
     .await??;
     Ok(result)
